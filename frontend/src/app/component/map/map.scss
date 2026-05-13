@@ -1,0 +1,151 @@
+:host {
+	display: block;
+	padding: 24px;
+}
+
+.map-shell {
+	display: grid;
+	gap: 20px;
+	max-width: 1280px;
+	margin: 0 auto;
+}
+
+.map-header {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	align-items: end;
+}
+
+.eyebrow {
+	margin: 0 0 8px;
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	font-size: 0.75rem;
+	color: #7dc4ff;
+}
+
+h1,
+h2,
+p {
+	margin: 0;
+}
+
+h1 {
+	font-size: clamp(2rem, 4vw, 3.5rem);
+	line-height: 1;
+}
+
+.summary {
+	max-width: 32rem;
+	color: #a8bbd6;
+	line-height: 1.5;
+}
+
+.map-panel {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 280px;
+	gap: 16px;
+	align-items: stretch;
+}
+
+.map-canvas,
+.people-list {
+	border: 1px solid rgba(145, 179, 224, 0.2);
+	border-radius: 24px;
+	background: rgba(10, 18, 32, 0.9);
+	box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.map-canvas {
+	min-height: 72vh;
+}
+
+.people-list {
+	padding: 20px;
+}
+
+.people-list h2 {
+	margin-bottom: 16px;
+	font-size: 1rem;
+	color: #dce9fb;
+}
+
+.people-list ul {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 12px;
+}
+
+.people-list li {
+	display: grid;
+	gap: 2px;
+	padding: 12px 14px;
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.04);
+	cursor: pointer;
+	transition: all 200ms ease;
+}
+
+.people-list li:hover {
+	background: rgba(255, 255, 255, 0.08);
+	transform: translateX(4px);
+}
+
+.people-list li.active {
+	background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(59, 130, 246, 0.15) 100%);
+	border: 1px solid rgba(37, 99, 235, 0.4);
+	box-shadow: 0 0 12px rgba(37, 99, 235, 0.3);
+}
+
+.people-list strong {
+	font-size: 0.95rem;
+}
+
+.people-list span {
+	color: #9cb0c8;
+	font-size: 0.9rem;
+}
+
+@media (max-width: 960px) {
+	:host {
+		padding: 16px;
+	}
+
+	.map-header,
+	.map-panel {
+		grid-template-columns: 1fr;
+		flex-direction: column;
+	}
+
+	.map-canvas {
+		min-height: 60vh;
+	}
+}
+
+:global(.person-marker) {
+	background: transparent;
+	border: none;
+	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) drop-shadow(0 0 8px rgba(37, 99, 235, 0.4));
+}
+
+:global(.person-marker:hover) {
+	filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 12px rgba(37, 99, 235, 0.6));
+}
+
+:global(.person-marker-red) {
+	background: transparent;
+	border: none;
+	filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) drop-shadow(0 0 12px rgba(220, 38, 38, 0.6));
+}
+
+:global(.person-marker-red:hover) {
+	filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 16px rgba(220, 38, 38, 0.8));
+}
+
+:global(.leaflet-container) {
+	background: #0b1629;
+	border-radius: 24px;
+}

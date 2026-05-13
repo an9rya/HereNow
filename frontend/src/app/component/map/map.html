@@ -1,1 +1,26 @@
+<section class="map-shell">
+	<header class="map-header">
+		<div>
+			<p class="eyebrow">Live positions</p>
+			<h1>Toronto on the map</h1>
+		</div>
+		<p class="summary">Leaflet view with 10 people placed across downtown and nearby neighborhoods.</p>
+	</header>
+
+	<div class="map-panel">
+		<div #mapContainer class="map-canvas" aria-label="Map of Toronto with 10 people"></div>
+
+		<aside class="people-list" aria-label="People shown on the map">
+			<h2>People</h2>
+			<ul>
+				@for (person of people; track person.name) {
+					<li (click)="focusPerson(person)" [class.active]="selectedPerson() === person" class="person-item">
+						<strong>{{ person.name }}</strong>
+						<span>{{ person.neighborhood }}</span>
+					</li>
+				}
+			</ul>
+		</aside>
+	</div>
+</section>
 

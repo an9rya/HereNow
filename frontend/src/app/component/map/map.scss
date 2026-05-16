@@ -145,6 +145,11 @@ h1 {
 	filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 16px rgba(220, 38, 38, 0.8));
 }
 
+:global(.person-marker svg),
+:global(.person-marker-red svg) {
+	pointer-events: none;
+}
+
 :global(.leaflet-container) {
 	background: #0b1629;
 	border-radius: 24px;

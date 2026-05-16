@@ -6,6 +6,7 @@ type PersonLocation = {
   lat: number;
   lng: number;
   neighborhood: string;
+  group: string;
 };
 
 type PersonMovement = {
@@ -32,25 +33,18 @@ type PersonMovement = {
 export class Map implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) private readonly mapContainer?: ElementRef<HTMLDivElement>;
 
-  protected readonly people: PersonLocation[] = [
-    { name: 'Ava', lat: 43.6532, lng: -79.3832, neighborhood: 'Downtown' },
-    { name: 'Noah', lat: 43.6465, lng: -79.3806, neighborhood: 'Entertainment District' },
-    { name: 'Mia', lat: 43.6614, lng: -79.3915, neighborhood: 'University District' },
-    { name: 'Liam', lat: 43.6487, lng: -79.3767, neighborhood: 'St. Lawrence' },
-    { name: 'Sophia', lat: 43.6703, lng: -79.3793, neighborhood: 'Yorkville' },
-    { name: 'Ethan', lat: 43.6681, lng: -79.4071, neighborhood: 'The Annex' },
-    { name: 'Olivia', lat: 43.6414, lng: -79.3895, neighborhood: 'Harbourfront' },
-    { name: 'Lucas', lat: 43.6515, lng: -79.3627, neighborhood: 'Distillery District' },
-    { name: 'Amelia', lat: 43.6757, lng: -79.4093, neighborhood: 'Casa Loma' },
-    { name: 'Benjamin', lat: 43.6293, lng: -79.3936, neighborhood: 'Fort York' },
-  ];
+  protected readonly groups: string[] = ['Group A', 'Group B', 'Group C'];
+  protected readonly people: PersonLocation[];
 
   private map?: L.Map;
   private previousMarker?: L.Marker;
   private markerMap: { [key: string]: L.Marker } = {};
   protected selectedPerson = signal<PersonLocation | null>(null);
+  protected selectedGroups = signal<Set<string>>(new Set(this.groups));
   private animationFrameId?: number;
   private personMovements: { [key: string]: PersonMovement } = {};
+  private lastMarkerInteractionAt = 0;
+  private readonly MAP_UNFOCUS_GUARD_MS = 300;
   private readonly MOVEMENT_RADIUS = 0.008; // Radius in degrees (~800 meters at equator)
   private readonly BASE_MOVE_INTERVAL = 2500; // Base interval between movements in ms
   private readonly MIN_SPEED = 0; // Minimum speed in km/h
@@ -62,6 +56,21 @@ export class Map implements AfterViewInit, OnDestroy {
     east: -79.34,
     west: -79.43,
   };
+
+  constructor() {
+    this.people = this.createPeopleWithRandomGroups([
+      { name: 'Ava', lat: 43.6532, lng: -79.3832, neighborhood: 'Downtown' },
+      { name: 'Noah', lat: 43.6465, lng: -79.3806, neighborhood: 'Entertainment District' },
+      { name: 'Mia', lat: 43.6614, lng: -79.3915, neighborhood: 'University District' },
+      { name: 'Liam', lat: 43.6487, lng: -79.3767, neighborhood: 'St. Lawrence' },
+      { name: 'Sophia', lat: 43.6703, lng: -79.3793, neighborhood: 'Yorkville' },
+      { name: 'Ethan', lat: 43.6681, lng: -79.4071, neighborhood: 'The Annex' },
+      { name: 'Olivia', lat: 43.6414, lng: -79.3895, neighborhood: 'Harbourfront' },
+      { name: 'Lucas', lat: 43.6515, lng: -79.3627, neighborhood: 'Distillery District' },
+      { name: 'Amelia', lat: 43.6757, lng: -79.4093, neighborhood: 'Casa Loma' },
+      { name: 'Benjamin', lat: 43.6293, lng: -79.3936, neighborhood: 'Fort York' },
+    ]);
+  }
 
   ngAfterViewInit(): void {
     if (!this.mapContainer) {
@@ -89,9 +98,9 @@ export class Map implements AfterViewInit, OnDestroy {
           direction: 'top',
           offset: [0, -8],
         })
-        .on('click', () => this.focusPerson(person))
-        .on('touchstart', () => this.focusPerson(person))
-        .on('mousedown', () => this.focusPerson(person));
+        .on('click', (event: L.LeafletEvent) => this.onMarkerInteraction(person, event))
+        .on('touchstart', (event: L.LeafletEvent) => this.onMarkerInteraction(person, event))
+        .on('mousedown', (event: L.LeafletEvent) => this.onMarkerInteraction(person, event));
       bounds.extend([person.lat, person.lng]);
 
       // Initialize movement tracking for this person
@@ -114,8 +123,82 @@ export class Map implements AfterViewInit, OnDestroy {
       this.map.fitBounds(bounds.pad(0.2));
     }
 
+    this.map.on('click', (event: L.LeafletMouseEvent) => {
+      if (Date.now() - this.lastMarkerInteractionAt < this.MAP_UNFOCUS_GUARD_MS) {
+        return;
+      }
+      if (this.shouldIgnoreMapClick(event)) {
+        return;
+      }
+      this.clearFocus();
+    });
+
+    this.applyGroupFilter();
+
     // Start the smooth animation loop
     this.startSmoothAnimation();
+  }
+
+  protected toggleGroup(group: string): void {
+    const next = new Set(this.selectedGroups());
+    if (next.has(group)) {
+      next.delete(group);
+    } else {
+      next.add(group);
+    }
+    this.selectedGroups.set(next);
+    this.applyGroupFilter();
+  }
+
+  protected isGroupSelected(group: string): boolean {
+    return this.selectedGroups().has(group);
+  }
+
+  protected isPersonVisible(person: PersonLocation): boolean {
+    return this.isGroupSelected(person.group);
+  }
+
+  private applyGroupFilter(): void {
+    if (!this.map) {
+      return;
+    }
+
+    for (const person of this.people) {
+      const marker = this.markerMap[person.name];
+      if (!marker) {
+        continue;
+      }
+
+      if (this.isPersonVisible(person)) {
+        if (!this.map.hasLayer(marker)) {
+          marker.addTo(this.map);
+        }
+      } else if (this.map.hasLayer(marker)) {
+        marker.closeTooltip();
+        this.map.removeLayer(marker);
+      }
+    }
+
+    const selected = this.selectedPerson();
+    if (selected && !this.isPersonVisible(selected)) {
+      if (this.previousMarker) {
+        this.previousMarker.closeTooltip();
+      }
+      this.selectedPerson.set(null);
+      this.previousMarker = undefined;
+    }
+  }
+
+  private createPeopleWithRandomGroups(
+    people: Array<Omit<PersonLocation, 'group'>>
+  ): PersonLocation[] {
+    return people.map(person => {
+      const randomGroup = this.groups[Math.floor(Math.random() * this.groups.length)];
+      return {
+        ...person,
+        group: randomGroup,
+      };
+    });
   }
 
   private easeInOutQuad(t: number): number {
@@ -287,6 +370,7 @@ export class Map implements AfterViewInit, OnDestroy {
 
   focusPerson(person: PersonLocation): void {
     if (!this.map) return;
+    if (!this.isPersonVisible(person)) return;
 
     // Revert previous marker to blue
     if (this.previousMarker) {
@@ -314,6 +398,50 @@ export class Map implements AfterViewInit, OnDestroy {
 
     this.selectedPerson.set(person);
     this.map.flyTo([person.lat, person.lng], 15);
+  }
+
+  private onMarkerInteraction(person: PersonLocation, event: L.LeafletEvent): void {
+    this.lastMarkerInteractionAt = Date.now();
+    const originalEvent = (event as L.LeafletMouseEvent).originalEvent;
+    if (originalEvent) {
+      originalEvent.stopPropagation();
+    }
+    this.focusPerson(person);
+  }
+
+  private clearFocus(): void {
+    if (!this.previousMarker) {
+      this.selectedPerson.set(null);
+      return;
+    }
+
+    const prevPersonName = Object.keys(this.markerMap).find(
+      name => this.markerMap[name] === this.previousMarker
+    );
+
+    if (prevPersonName) {
+      const movement = this.personMovements[prevPersonName];
+      const speed = movement?.currentSpeed || 0;
+      const blueIcon = this.createPersonIcon(prevPersonName, speed, false);
+      this.previousMarker.setIcon(blueIcon);
+      this.previousMarker.closeTooltip();
+    }
+
+    this.previousMarker = undefined;
+    this.selectedPerson.set(null);
+  }
+
+  private shouldIgnoreMapClick(event: L.LeafletMouseEvent): boolean {
+    const target = event.originalEvent?.target;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+
+    return Boolean(
+      target.closest('.leaflet-marker-icon') ||
+        target.closest('.leaflet-tooltip') ||
+        target.closest('.leaflet-popup')
+    );
   }
 
   ngOnDestroy(): void {

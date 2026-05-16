@@ -49,6 +49,37 @@ h1 {
 	align-items: stretch;
 }
 
+.group-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
+.group-chip {
+	border: 1px solid rgba(125, 196, 255, 0.35);
+	background: rgba(12, 28, 46, 0.85);
+	color: #dce9fb;
+	border-radius: 999px;
+	padding: 8px 14px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	cursor: pointer;
+	transition: all 180ms ease;
+}
+
+.group-chip:hover {
+	transform: translateY(-1px);
+	border-color: rgba(125, 196, 255, 0.55);
+	background: rgba(16, 35, 56, 0.95);
+}
+
+.group-chip.active {
+	border-color: rgba(37, 99, 235, 0.7);
+	background: linear-gradient(135deg, rgba(37, 99, 235, 0.35) 0%, rgba(30, 64, 175, 0.25) 100%);
+	box-shadow: 0 0 12px rgba(37, 99, 235, 0.28);
+}
+
 .map-canvas,
 .people-list {
 	border: 1px solid rgba(145, 179, 224, 0.2);

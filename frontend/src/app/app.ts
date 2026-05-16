@@ -23,6 +23,6 @@ export class App implements OnInit {
   }
 
   private updateNavbarVisibility() {
-    this.showNavbar.set(this.router.url !== '/');
+    this.showNavbar.set(this.router.url !== '/' && this.router.url !== '/signup');
   }
 }

@@ -22,6 +22,7 @@ type PersonMovement = {
   currentSpeed: number; // Speed in km/h
   targetSpeed: number; // Target speed for this movement segment (0-120 km/h)
   animationDuration: number; // Dynamic animation duration based on speed
+  isInDowntown?: boolean; // Track whether person is currently inside downtown geofence
 };
 
 @Component({
@@ -41,6 +42,7 @@ export class Map implements AfterViewInit, OnDestroy {
   private markerMap: { [key: string]: L.Marker } = {};
   protected selectedPerson = signal<PersonLocation | null>(null);
   protected selectedGroups = signal<Set<string>>(new Set(this.groups));
+  protected readonly peopleOutside = signal<PersonLocation[]>([]);
   private animationFrameId?: number;
   private personMovements: { [key: string]: PersonMovement } = {};
   private lastMarkerInteractionAt = 0;
@@ -50,25 +52,40 @@ export class Map implements AfterViewInit, OnDestroy {
   private readonly MIN_SPEED = 0; // Minimum speed in km/h
   private readonly MAX_SPEED = 120; // Maximum speed in km/h
   private readonly SPEED_MULTIPLIER = 1.35; // Global multiplier to make movement feel snappier
+  // Expand bounds to cover the Greater Toronto Area (GTA)
   private readonly TORONTO_BOUNDS = {
-    north: 43.72,
-    south: 43.58,
-    east: -79.34,
-    west: -79.43,
+    north: 43.90,
+    south: 43.35,
+    east: -79.10,
+    west: -80.00,
   };
 
+  // Geofence: circular area centered on Downtown Toronto up to Pearson Airport
+  private readonly geofenceCenter = { lat: 43.6532, lng: -79.3832 }; // Downtown centre
+  // Toronto Pearson Airport approximate coordinates
+  private readonly geofenceAirport = { lat: 43.6777, lng: -79.6248 };
+  private geofenceRadiusMeters = 0; // computed in constructor
+
   constructor() {
+    // compute circular geofence radius from downtown to airport
+    this.geofenceRadiusMeters = this.calculateDistance(
+      this.geofenceCenter.lat,
+      this.geofenceCenter.lng,
+      this.geofenceAirport.lat,
+      this.geofenceAirport.lng
+    );
+    // Move some people to nearby cities around Toronto (GTA)
     this.people = this.createPeopleWithRandomGroups([
-      { name: 'Ava', lat: 43.6532, lng: -79.3832, neighborhood: 'Downtown' },
-      { name: 'Noah', lat: 43.6465, lng: -79.3806, neighborhood: 'Entertainment District' },
+      { name: 'Ava', lat: 43.6532, lng: -79.3832, neighborhood: 'Downtown Toronto' },
+      { name: 'Noah', lat: 43.5934, lng: -79.6406, neighborhood: 'Mississauga' },
       { name: 'Mia', lat: 43.6614, lng: -79.3915, neighborhood: 'University District' },
-      { name: 'Liam', lat: 43.6487, lng: -79.3767, neighborhood: 'St. Lawrence' },
-      { name: 'Sophia', lat: 43.6703, lng: -79.3793, neighborhood: 'Yorkville' },
+      { name: 'Liam', lat: 43.7315, lng: -79.7624, neighborhood: 'Brampton' },
+      { name: 'Sophia', lat: 43.8561, lng: -79.3370, neighborhood: 'Markham' },
       { name: 'Ethan', lat: 43.6681, lng: -79.4071, neighborhood: 'The Annex' },
       { name: 'Olivia', lat: 43.6414, lng: -79.3895, neighborhood: 'Harbourfront' },
-      { name: 'Lucas', lat: 43.6515, lng: -79.3627, neighborhood: 'Distillery District' },
-      { name: 'Amelia', lat: 43.6757, lng: -79.4093, neighborhood: 'Casa Loma' },
-      { name: 'Benjamin', lat: 43.6293, lng: -79.3936, neighborhood: 'Fort York' },
+      { name: 'Lucas', lat: 43.8372, lng: -79.5083, neighborhood: 'Vaughan' },
+      { name: 'Amelia', lat: 43.4675, lng: -79.6877, neighborhood: 'Oakville' },
+      { name: 'Benjamin', lat: 43.6752, lng: -79.2473, neighborhood: 'Scarborough' },
     ]);
   }
 
@@ -116,12 +133,19 @@ export class Map implements AfterViewInit, OnDestroy {
         currentSpeed: 0,
         targetSpeed: 0,
         animationDuration: 3000,
+        isInDowntown: this.isInDowntown(person.lat, person.lng),
       };
     });
 
     if (bounds.isValid()) {
       this.map.fitBounds(bounds.pad(0.2));
     }
+
+    // Initialize peopleOutside list based on initial downtown membership
+    const outside = Object.values(this.personMovements)
+      .filter(m => !m.isInDowntown)
+      .map(m => m.person);
+    this.peopleOutside.set(outside);
 
     this.map.on('click', (event: L.LeafletMouseEvent) => {
       if (Date.now() - this.lastMarkerInteractionAt < this.MAP_UNFOCUS_GUARD_MS) {
@@ -229,6 +253,32 @@ export class Map implements AfterViewInit, OnDestroy {
     return R * c; // Distance in meters
   }
 
+  private isInWater(lat: number, lng: number): boolean {
+    // Approximate Lake Ontario / harbour water and avoid placing people there.
+    // This is intentionally conservative: if a point looks like it is over the lake,
+    // we reject it and generate another one.
+    const lakeOntario = lat < 43.72 && lng > -79.60 && lng < -79.12;
+    const torontoHarbour = lat < 43.66 && lng > -79.40 && lng < -79.34;
+    const mississaugaShore = lat < 43.58 && lng > -79.68 && lng < -79.45;
+    return lakeOntario || torontoHarbour || mississaugaShore;
+  }
+
+  private isInDowntown(lat: number, lng: number): boolean {
+    const d = this.calculateDistance(lat, lng, this.geofenceCenter.lat, this.geofenceCenter.lng);
+    return d <= this.geofenceRadiusMeters;
+  }
+
+  private triggerGeofenceAlert(person: PersonLocation): void {
+    // Alerts removed: log for debugging only
+    console.info(`${person.name} left the Toronto geofence.`);
+  }
+
+  protected isPersonShownInMainList(person: PersonLocation): boolean {
+    // Person must be visible by group and not currently outside downtown
+    const outside = this.peopleOutside().some(p => p.name === person.name);
+    return this.isPersonVisible(person) && !outside;
+  }
+
   private createPersonIcon(personName: string, speed: number, isSelected: boolean = false): L.DivIcon {
     const initial = personName.charAt(0).toUpperCase();
     const color = isSelected ? '#dc2626' : '#2563eb';
@@ -245,24 +295,20 @@ export class Map implements AfterViewInit, OnDestroy {
   }
 
   private generateTargetLocation(currentLat: number, currentLng: number): { lat: number; lng: number } {
-    let targetLat: number;
-    let targetLng: number;
-    let attempts = 0;
+    // Choose a nearby random point within the Toronto/GTA bounds, avoiding water.
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 0.01 + Math.random() * 0.04;
+      const lat = currentLat + Math.cos(angle) * distance;
+      const lng = currentLng + Math.sin(angle) * distance;
 
-    do {
-      const angle = Math.random() * Math.PI * 2; // Random direction 0-2π
-      const distance = Math.random() * this.MOVEMENT_RADIUS;
-
-      targetLat = currentLat + Math.cos(angle) * distance;
-      targetLng = currentLng + Math.sin(angle) * distance;
-      attempts++;
-    } while (!this.isWithinBounds(targetLat, targetLng) && attempts < 5);
-
-    if (!this.isWithinBounds(targetLat, targetLng)) {
-      return { lat: currentLat, lng: currentLng };
+      if (this.isWithinBounds(lat, lng) && !this.isInWater(lat, lng)) {
+        return { lat, lng };
+      }
     }
 
-    return { lat: targetLat, lng: targetLng };
+    // Fallback: if we fail to find a land point, stay put rather than jumping into water.
+    return { lat: currentLat, lng: currentLng };
   }
 
   private startSmoothAnimation(): void {
@@ -344,6 +390,26 @@ export class Map implements AfterViewInit, OnDestroy {
             if (isSelected) {
               marker.openTooltip();
             }
+          }
+
+          // Geofence check: detect exit from downtown
+          const wasInDowntown = movement.isInDowntown ?? false;
+          const nowInDowntown = this.isInDowntown(newLat, newLng);
+          if (wasInDowntown && !nowInDowntown) {
+            movement.isInDowntown = false;
+            this.triggerGeofenceAlert(movement.person);
+            // Add to outside list if not already present
+            const current = this.peopleOutside();
+            if (!current.find(p => p.name === movement.person.name)) {
+              this.peopleOutside.set([...current, movement.person]);
+            }
+          } else if (!wasInDowntown && nowInDowntown) {
+            // Person re-entered downtown: remove from outside list
+            movement.isInDowntown = true;
+            const current = this.peopleOutside();
+            this.peopleOutside.set(current.filter(p => p.name !== movement.person.name));
+          } else {
+            movement.isInDowntown = nowInDowntown;
           }
         } else if (!movement.isMoving) {
           // Update popup when stopped to remove speed

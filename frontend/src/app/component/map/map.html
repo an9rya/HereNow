@@ -22,7 +22,7 @@
 			<h2>People</h2>
 			<ul>
 				@for (person of people; track person.name) {
-					@if (isPersonVisible(person)) {
+					@if (isPersonShownInMainList(person)) {
 						<li (click)="focusPerson(person)" [class.active]="selectedPerson() === person" class="person-item">
 							<strong>{{ person.name }}</strong>
 							<span>{{ person.neighborhood }} · {{ person.group }}</span>
@@ -30,7 +30,20 @@
 					}
 				}
 			</ul>
+
+			@if (peopleOutside().length > 0) {
+				<div class="outside-box" aria-label="People outside Toronto">
+					<h4>Outside Toronto</h4>
+					<ul>
+						@for (p of peopleOutside(); track p.name) {
+							<li (click)="focusPerson(p)" [class.active]="selectedPerson() === p" class="person-item outside-item">
+								<strong>{{ p.name }}</strong>
+								<span>{{ p.neighborhood }} · {{ p.group }}</span>
+							</li>
+						}
+					</ul>
+				</div>
+			}
 		</aside>
 	</div>
 </section>
-

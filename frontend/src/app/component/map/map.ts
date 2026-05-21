@@ -2,18 +2,19 @@ import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, signal } fr
 import * as L from 'leaflet';
 import { PersonLocation } from '../../interface/location';
 import { People } from '../../service/people';
+import { PersonMovement } from '../../interface/movement';
 
 @Component({
   selector: 'app-map',
   imports: [],
   templateUrl: './map.html',
-  styleUrl: './map.scss',
+  styleUrls: ['./map.scss'],
 })
 export class Map implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) private readonly mapContainer?: ElementRef<HTMLDivElement>;
 
-  private readonly people: PersonLocation[];
-  private readonly groups: string[] = [];
+  public readonly people: PersonLocation[];
+  protected readonly groups: string[] = [];
 
   private map?: L.Map;
   private previousMarker?: L.Marker;
@@ -115,7 +116,7 @@ export class Map implements AfterViewInit, OnDestroy {
 
     // Initialize peopleOutside list based on initial downtown membership
     const outside = Object.values(this.personMovements)
-      .filter(m => !m.isInDowntown)
+      .filter(m => !m.isInDowntown && this.isGroupSelected(m.person.group))
       .map(m => m.person);
     this.peopleOutside.set(outside);
 
@@ -183,6 +184,12 @@ export class Map implements AfterViewInit, OnDestroy {
       this.selectedPerson.set(null);
       this.previousMarker = undefined;
     }
+
+    // Recompute outside list to only include outside people in selected groups
+    const outside = Object.values(this.personMovements)
+      .filter(m => !m.isInDowntown && this.isGroupSelected(m.person.group))
+      .map(m => m.person);
+    this.peopleOutside.set(outside);
   }
 
   private easeInOutQuad(t: number): number {
@@ -358,9 +365,9 @@ export class Map implements AfterViewInit, OnDestroy {
           if (wasInDowntown && !nowInDowntown) {
             movement.isInDowntown = false;
             this.triggerGeofenceAlert(movement.person);
-            // Add to outside list if not already present
+            // Add to outside list if not already present AND the person's group is selected
             const current = this.peopleOutside();
-            if (!current.find(p => p.name === movement.person.name)) {
+            if (this.isGroupSelected(movement.person.group) && !current.find(p => p.name === movement.person.name)) {
               this.peopleOutside.set([...current, movement.person]);
             }
           } else if (!wasInDowntown && nowInDowntown) {

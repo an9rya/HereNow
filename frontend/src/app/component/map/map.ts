@@ -1,29 +1,7 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, signal } from '@angular/core';
 import * as L from 'leaflet';
-
-type PersonLocation = {
-  name: string;
-  lat: number;
-  lng: number;
-  neighborhood: string;
-  group: string;
-};
-
-type PersonMovement = {
-  person: PersonLocation;
-  targetLat: number;
-  targetLng: number;
-  startLat: number;
-  startLng: number;
-  progress: number;
-  isMoving: boolean;
-  nextMoveTime: number;
-  currentDirection?: number; // Angle in radians for directional movement
-  currentSpeed: number; // Speed in km/h
-  targetSpeed: number; // Target speed for this movement segment (0-120 km/h)
-  animationDuration: number; // Dynamic animation duration based on speed
-  isInDowntown?: boolean; // Track whether person is currently inside downtown geofence
-};
+import { PersonLocation } from '../../interface/location';
+import { People } from '../../service/people';
 
 @Component({
   selector: 'app-map',
@@ -34,18 +12,20 @@ type PersonMovement = {
 export class Map implements AfterViewInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) private readonly mapContainer?: ElementRef<HTMLDivElement>;
 
-  protected readonly groups: string[] = ['Group A', 'Group B', 'Group C'];
-  protected readonly people: PersonLocation[];
+  private readonly people: PersonLocation[];
+  private readonly groups: string[] = [];
 
   private map?: L.Map;
   private previousMarker?: L.Marker;
   private markerMap: { [key: string]: L.Marker } = {};
+
   protected selectedPerson = signal<PersonLocation | null>(null);
-  protected selectedGroups = signal<Set<string>>(new Set(this.groups));
+  protected selectedGroups = signal<Set<string> | null>(null);
   protected readonly peopleOutside = signal<PersonLocation[]>([]);
   private animationFrameId?: number;
   private personMovements: { [key: string]: PersonMovement } = {};
   private lastMarkerInteractionAt = 0;
+
   private readonly MAP_UNFOCUS_GUARD_MS = 300;
   private readonly MOVEMENT_RADIUS = 0.008; // Radius in degrees (~800 meters at equator)
   private readonly BASE_MOVE_INTERVAL = 2500; // Base interval between movements in ms
@@ -66,7 +46,12 @@ export class Map implements AfterViewInit, OnDestroy {
   private readonly geofenceAirport = { lat: 43.6777, lng: -79.6248 };
   private geofenceRadiusMeters = 0; // computed in constructor
 
-  constructor() {
+  constructor(private peopleService: People) {
+    this.people = this.peopleService.getPeople();
+    this.groups = this.peopleService.getGroups();
+
+    this.selectedGroups.set(new Set(this.groups)); // All groups selected by default
+
     // compute circular geofence radius from downtown to airport
     this.geofenceRadiusMeters = this.calculateDistance(
       this.geofenceCenter.lat,
@@ -74,19 +59,6 @@ export class Map implements AfterViewInit, OnDestroy {
       this.geofenceAirport.lat,
       this.geofenceAirport.lng
     );
-    // Move some people to nearby cities around Toronto (GTA)
-    this.people = this.createPeopleWithRandomGroups([
-      { name: 'Ava', lat: 43.6532, lng: -79.3832, neighborhood: 'Downtown Toronto' },
-      { name: 'Noah', lat: 43.5934, lng: -79.6406, neighborhood: 'Mississauga' },
-      { name: 'Mia', lat: 43.6614, lng: -79.3915, neighborhood: 'University District' },
-      { name: 'Liam', lat: 43.7315, lng: -79.7624, neighborhood: 'Brampton' },
-      { name: 'Sophia', lat: 43.8561, lng: -79.3370, neighborhood: 'Markham' },
-      { name: 'Ethan', lat: 43.6681, lng: -79.4071, neighborhood: 'The Annex' },
-      { name: 'Olivia', lat: 43.6414, lng: -79.3895, neighborhood: 'Harbourfront' },
-      { name: 'Lucas', lat: 43.8372, lng: -79.5083, neighborhood: 'Vaughan' },
-      { name: 'Amelia', lat: 43.4675, lng: -79.6877, neighborhood: 'Oakville' },
-      { name: 'Benjamin', lat: 43.6752, lng: -79.2473, neighborhood: 'Scarborough' },
-    ]);
   }
 
   ngAfterViewInit(): void {
@@ -175,7 +147,7 @@ export class Map implements AfterViewInit, OnDestroy {
   }
 
   protected isGroupSelected(group: string): boolean {
-    return this.selectedGroups().has(group);
+    return this.selectedGroups()?.has(group) ?? false;
   }
 
   protected isPersonVisible(person: PersonLocation): boolean {
@@ -211,18 +183,6 @@ export class Map implements AfterViewInit, OnDestroy {
       this.selectedPerson.set(null);
       this.previousMarker = undefined;
     }
-  }
-
-  private createPeopleWithRandomGroups(
-    people: Array<Omit<PersonLocation, 'group'>>
-  ): PersonLocation[] {
-    return people.map(person => {
-      const randomGroup = this.groups[Math.floor(Math.random() * this.groups.length)];
-      return {
-        ...person,
-        group: randomGroup,
-      };
-    });
   }
 
   private easeInOutQuad(t: number): number {
